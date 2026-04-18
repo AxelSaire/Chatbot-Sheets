@@ -1,0 +1,11 @@
+# Sensibles
+credentials.json
+
+# Dependencias
+node_modules/
+
+# Sesiones / auth
+auth/
+
+# Lock file (opcional)
+package-lock.json

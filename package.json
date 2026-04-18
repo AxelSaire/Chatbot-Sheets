@@ -1,0 +1,9 @@
+{
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.6.0",
+    "fs": "^0.0.1-security",
+    "googleapis": "^171.4.0",
+    "pino": "^10.3.1",
+    "qrcode-terminal": "^0.12.0"
+  }
+}
