@@ -138,10 +138,51 @@ async function actualizarPago(codigo, pagado, formaPago) {
 
   return true;
 }
+async function eliminarUltimoRegistro() {
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: SPREADSHEET_ID,
+    range: RANGE
+  });
+
+  const rows = res.data.values;
+
+  if (!rows || rows.length <= 1) {
+    return { error: 'no_hay_registros' };
+  }
+
+  // 🔥 última fila (sin contar header)
+  const lastIndex = rows.length - 1;
+  const lastRow = rows[lastIndex];
+
+  const CODIGO = lastRow[1];
+  const NOMBRE = lastRow[2];
+
+  // 🔥 eliminar fila
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId: SPREADSHEET_ID,
+    requestBody: {
+      requests: [
+        {
+          deleteDimension: {
+            range: {
+              sheetId: 0, // ⚠️ normalmente es 0 (Hoja1)
+              dimension: "ROWS",
+              startIndex: lastIndex,
+              endIndex: lastIndex + 1
+            }
+          }
+        }
+      ]
+    }
+  });
+
+  return { CODIGO, NOMBRE };
+}
 
 module.exports = {
   guardarRegistro,
   verificarPendiente,
   actualizarPago,
-  getResumen
+  getResumen,
+  eliminarUltimoRegistro
 };

@@ -5,6 +5,7 @@ const fs = require('fs');
 const { generarCodigo, obtenerFecha, procesarMoneda } = require('./utils');
 const { guardarRegistro, verificarPendiente, actualizarPago } = require('./sheets');
 const { getResumen } = require('./sheets');
+const { eliminarUltimoRegistro } = require('./sheets');
 
 async function startBot() {
   const { state, saveCreds } = await useMultiFileAuthState('auth');
@@ -69,6 +70,30 @@ async function startBot() {
     //     // Ejemplo: if (text === '/ayuda') { ... }
     //     return;
     //   }
+    if (text.toLowerCase() === '/eliminarultimo') {
+
+    const eliminado = await eliminarUltimoRegistro();
+
+    if (eliminado.error) {
+      await sock.sendMessage(jid, {
+        text: '⚠️ No hay registros para eliminar'
+      }, { quoted: msg });
+      continue;
+    }
+
+    await sock.sendMessage(
+      jid,
+      {
+        text: `*Eliminado correctamente*
+
+    ✅ CODIGO: *${eliminado.CODIGO}*
+    👤 ${eliminado.NOMBRE}`
+      },
+      { quoted: msg }
+    );
+
+    continue;
+    }
      if (text.toLowerCase().startsWith('/resumen')) {
         const input = text.split(' ')[1]?.trim().toLowerCase();
 
@@ -78,7 +103,7 @@ async function startBot() {
             tipo = 'hoy';
         } else if (input === 'mes') {
             tipo = 'mes';
-        } else if (input === 'año' || input === 'ano') {
+        } else if (input === 'año' || input === 'year') {
             tipo = 'año';
         } else {
             await sock.sendMessage(jid, {
@@ -119,19 +144,14 @@ async function startBot() {
       const { usd, soles } = procesarMoneda(precioRaw);
 
       let descripcion = partes[3]
-        ? partes.slice(3).join(', ').toUpperCase()
-        : (usd !== '-' && parseInt(usd.replace('$', '')) <= 350
-            ? 'EMISIONES'
-            : 'CONFIGURACION');
-
-      // 🔥 Validación: soles requieren descripción
-      if (soles !== '-' && !partes[3]) {
-        await sock.sendMessage(jid, {
-          text: '⚠️ En soles debes agregar descripción',
-        });
-        return;
-      }
-
+      ? partes.slice(3).join(', ').toUpperCase()
+      : (
+          soles !== '-' 
+            ? 'EMISIONES' // --SOLES siempre
+            : (parseInt(String(usd).replace(/[^\d]/g, '')) <= 350
+                ? 'EMISIONES'
+                : 'CONFIGURACION')
+        );
       // 🔥 Warning de pagos pendientes
       const pendientes = await verificarPendiente(nombre);
 
