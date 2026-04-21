@@ -1,4 +1,4 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys')
 const P = require('pino');
 const qrcode = require('qrcode-terminal');
 const fs = require('fs');
@@ -8,16 +8,24 @@ const { getResumen } = require('./sheets');
 const { eliminarUltimoRegistro } = require('./sheets');
 
 async function startBot() {
-  const { state, saveCreds } = await useMultiFileAuthState('auth');
+ const { state, saveCreds } = await useMultiFileAuthState('auth');
+  const { version } = await fetchLatestBaileysVersion();
 
   const sock = makeWASocket({
+    version,
     auth: state,
     logger: P({ level: 'silent' }),
+    printQRInTerminal: false,
+    // ✅ Evita caídas por inactividad
+    keepAliveIntervalMs: 30_000,
+    // ✅ Evita desconexión por timeout
+    connectTimeoutMs: 60_000,
+    // ✅ No guardar todos los mensajes en memoria
+    getMessage: async () => undefined,
   });
 
   sock.ev.on('creds.update', saveCreds);
 
-  // -- Establecer conexión
   sock.ev.on('connection.update', (update) => {
     const { connection, lastDisconnect, qr } = update;
 
@@ -28,20 +36,32 @@ async function startBot() {
 
     if (connection === 'open') {
       console.log('✅ Bot conectado');
+      intentos = 0; // ✅ reset al conectar exitosamente
     }
 
     if (connection === 'close') {
-      const shouldReconnect =
-        lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
+      const codigo = lastDisconnect?.error?.output?.statusCode;
+      const fueLogout = codigo === DisconnectReason.loggedOut;
 
-      console.log('❌ Conexión cerrada');
+      console.log(`❌ Desconectado — código: ${codigo}`);
 
-      if (shouldReconnect) {
-        console.log('🔄 Reconectando...');
-        startBot();
-      } else {
-        console.log('⚠️ Sesión inválida, elimina la carpeta "auth" y reinicia');
+      if (fueLogout) {
+        console.log('⚠️ Sesión cerrada. Elimina la carpeta "auth" y reinicia.');
+        process.exit(1); // ✅ sale limpio para que el proceso manager reinicie
+        return;
       }
+
+      if (intentos >= MAX_INTENTOS) {
+        console.log(`🛑 ${MAX_INTENTOS} intentos fallidos. Reiniciando proceso...`);
+        process.exit(1);
+        return;
+      }
+
+      // ✅ Reconexión con backoff exponencial
+      const espera = Math.min(1000 * 2 ** intentos, 30_000);
+      intentos++;
+      console.log(`🔄 Reintento ${intentos}/${MAX_INTENTOS} en ${espera / 1000}s...`);
+      setTimeout(startBot, espera);
     }
   });
   
@@ -125,8 +145,8 @@ async function startBot() {
             `📦 Operaciones: *${r.cantidad}*\n` +
             `📅 Días activos: *${r.diasActivos}*\n` +
             `💵 Total USD: *$${r.totalUSD.toFixed(2)}*\n` +
-            `💰 Total Soles: *S/.${r.totalPEN.toFixed(2)}*\n` +
-            `📈 Promedio diario USD: *$${r.promedioUSD}*`
+            `💰 Total Soles: *S/. ${r.totalPEN.toFixed(2)}*\n` +
+            `📈 Promedio diario USD: *$ ${r.promedioUSD}*`
         }, { quoted: msg });
 
         return;
@@ -171,6 +191,8 @@ async function startBot() {
         DESCRIPCION: descripcion,
         USD_SERVICIO: usd,
         SOLES_SERVICIO: soles,
+        PAGADO: "PENDIENTE",
+        CONTABILIDAD:"PENDIENTE"
       });
 
       await sock.sendMessage(jid, {

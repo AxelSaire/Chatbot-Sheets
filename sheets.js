@@ -29,8 +29,8 @@ async function guardarRegistro(data) {
         data.USD_SERVICIO,
         data.SOLES_SERVICIO,
         "-",
-        "PENDIENTE",
-        "PENDIENTE",
+        data.PAGADO,
+        data.CONTABILIDAD,
         "-",
         "-",
         "-",
@@ -40,8 +40,40 @@ async function guardarRegistro(data) {
       ]]
     }
   });
+  // aplicarDropdownColumna();
 }
 
+// async function aplicarDropdownColumna() {
+//   await sheets.spreadsheets.batchUpdate({
+//     spreadsheetId: SPREADSHEET_ID,
+//     requestBody: {
+//       requests: [{
+//         setDataValidation: {
+//           range: {
+//             sheetId: 0,
+//             startRowIndex: 1,      // fila 2 en adelante (salta el header)
+//             endRowIndex: 1000,     // hasta la fila 1000
+//             startColumnIndex: 9,
+//             endColumnIndex: 10
+//           },
+//           rule: {
+//             condition: {
+//               type: 'ONE_OF_LIST',
+//               values: [
+//                 { userEnteredValue: 'PENDIENTE' },
+//                 { userEnteredValue: 'PAGADO' },
+//                 { userEnteredValue: 'NO PAGADO' },
+//                 { userEnteredValue: 'FOR FREE' }
+//               ]
+//             },
+//             showCustomUi: true,
+//             strict: true
+//           }
+//         }
+//       }]
+//     }
+//   });
+// }
 // 🔍 OBTENER TODO
 async function obtenerRegistros() {
   const res = await sheets.spreadsheets.values.get({
@@ -107,8 +139,13 @@ async function getResumen(tipo, valor = null) {
     }
 
     if (solesRaw && solesRaw !== '-') {
-      const val = parseFloat(String(solesRaw).replace(/[^\d.]/g, ''));
-      totalPEN += val || 0;
+    const val = Number(
+      String(solesRaw)
+        .replace(/s\/\.?|S\/\.?/gi, '') 
+        .replace(/[^\d.]/g, '')         
+    );
+
+    totalPEN += isNaN(val) ? 0 : val;
     }
   });
 
