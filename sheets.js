@@ -23,7 +23,7 @@ async function guardarRegistro(data) {
         data.FECHA,
         data.CODIGO,
         data.NOMBRE,
-        "",
+        data.NUMERO,
         data.EQUIPO,
         data.DESCRIPCION,
         data.USD_SERVICIO,
@@ -40,41 +40,157 @@ async function guardarRegistro(data) {
       ]]
     }
   });
-  // aplicarDropdownColumna();
+  aplicarDropdownColumna();
 }
 
-// async function aplicarDropdownColumna() {
-//   await sheets.spreadsheets.batchUpdate({
-//     spreadsheetId: SPREADSHEET_ID,
-//     requestBody: {
-//       requests: [{
-//         setDataValidation: {
-//           range: {
-//             sheetId: 0,
-//             startRowIndex: 1,      // fila 2 en adelante (salta el header)
-//             endRowIndex: 1000,     // hasta la fila 1000
-//             startColumnIndex: 9,
-//             endColumnIndex: 10
-//           },
-//           rule: {
-//             condition: {
-//               type: 'ONE_OF_LIST',
-//               values: [
-//                 { userEnteredValue: 'PENDIENTE' },
-//                 { userEnteredValue: 'PAGADO' },
-//                 { userEnteredValue: 'NO PAGADO' },
-//                 { userEnteredValue: 'FOR FREE' }
-//               ]
-//             },
-//             showCustomUi: true,
-//             strict: true
-//           }
-//         }
-//       }]
-//     }
-//   });
-// }
-// 🔍 OBTENER TODO
+async function aplicarDropdownColumna() {
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId: SPREADSHEET_ID,
+    requestBody: {
+      requests: [
+        //--- Desplegable (J y K)
+        {
+          setDataValidation: {
+            range: {
+              sheetId: 0,
+              startRowIndex: 1,
+              endRowIndex: 1000,
+              startColumnIndex: 9,  // J
+              endColumnIndex: 11    // K
+            },
+            rule: {
+              condition: {
+                type: 'ONE_OF_LIST',
+                values: [
+                  { userEnteredValue: 'PENDIENTE' },
+                  { userEnteredValue: 'PAGADO' },
+                  { userEnteredValue: 'NO PAGADO' },
+                  { userEnteredValue: 'FOR FREE' }
+                ]
+              },
+              showCustomUi: true,
+              strict: true
+            }
+          }
+        },
+
+        //---NO PAGADO (rojo)
+        {
+          addConditionalFormatRule: {
+            rule: {
+              ranges: [{
+                sheetId: 0,
+                startRowIndex: 1,
+                startColumnIndex: 9,
+                endColumnIndex: 11
+              }],
+              booleanRule: {
+                condition: {
+                  type: 'TEXT_EQ',
+                  values: [{ userEnteredValue: 'NO PAGADO' }]
+                },
+                format: {
+                  backgroundColor: { red: 1, green: 0.6, blue: 0.6 }
+                }
+              }
+            },
+            index: 0
+          }
+        },
+
+        //--- PAGADO (verde)
+        {
+          addConditionalFormatRule: {
+            rule: {
+              ranges: [{
+                sheetId: 0,
+                startRowIndex: 1,
+                startColumnIndex: 9,
+                endColumnIndex: 11
+              }],
+              booleanRule: {
+                condition: {
+                  type: 'TEXT_EQ',
+                  values: [{ userEnteredValue: 'PAGADO' }]
+                },
+                format: {
+                  backgroundColor: { red: 0.6, green: 0.9, blue: 0.6 }
+                }
+              }
+            },
+            index: 0
+          }
+        },
+
+        //--- PENDIENTE (amarillo)
+        {
+          addConditionalFormatRule: {
+            rule: {
+              ranges: [{
+                sheetId: 0,
+                startRowIndex: 1,
+                startColumnIndex: 9,
+                endColumnIndex: 11
+              }],
+              booleanRule: {
+                condition: {
+                  type: 'TEXT_EQ',
+                  values: [{ userEnteredValue: 'PENDIENTE' }]
+                },
+                format: {
+                  backgroundColor: { red: 1, green: 0.9, blue: 0.6 }
+                }
+              }
+            },
+            index: 0
+          }
+        },
+
+        //---FOR FREE (no color)
+        {
+          addConditionalFormatRule: {
+            rule: {
+              ranges: [{
+                sheetId: 0,
+                startRowIndex: 1,
+                startColumnIndex: 9,
+                endColumnIndex: 11
+              }],
+              booleanRule: {
+                condition: {
+                  type: 'TEXT_EQ',
+                  values: [{ userEnteredValue: 'FOR FREE' }]
+                },
+                format: {
+                  backgroundColor: { red: 0.85, green: 0.85, blue: 0.85 }
+                }
+              }
+            },
+            index: 0
+          }
+        }
+      ]
+    }
+  });
+}
+async function getDatosCliente(nombre) {
+  const rows = await obtenerRegistros();
+
+  const nombreUpper = nombre.toUpperCase();
+
+  // 🔥 buscar el más reciente (desde abajo)
+  for (let i = rows.length - 1; i >= 0; i--) {
+    if (rows[i][2] === nombreUpper) {
+      return {
+        numero: rows[i][3] || "",
+        encontrado: true
+      };
+    }
+  }
+
+  return { numero: "", encontrado: false };
+}
+
 async function obtenerRegistros() {
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
@@ -221,5 +337,6 @@ module.exports = {
   verificarPendiente,
   actualizarPago,
   getResumen,
-  eliminarUltimoRegistro
+  eliminarUltimoRegistro,
+  getDatosCliente
 };

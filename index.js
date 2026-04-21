@@ -5,6 +5,7 @@ const fs = require('fs');
 const { generarCodigo, obtenerFecha, procesarMoneda } = require('./utils');
 const { guardarRegistro, verificarPendiente, actualizarPago } = require('./sheets');
 const { getResumen } = require('./sheets');
+const { getDatosCliente } = require('./sheets');
 const { eliminarUltimoRegistro } = require('./sheets');
 
 async function startBot() {
@@ -84,6 +85,9 @@ async function startBot() {
 
       if (!text) return;
 
+    // console.log(`📨 [${new Date().toLocaleTimeString()}] JID: ${jid}`);
+    // console.log(`📨 Texto: "${text}"`);
+    // console.log(`📨 Partes: ${JSON.stringify(text.split(',').map(p => p.trim()))}`);
       // Comandos con "/"
     //   if (text.startsWith('/')) {
     //     // Aquí puedes agregar tus comandos
@@ -182,11 +186,14 @@ async function startBot() {
       }
 
       const CODIGO = generarCodigo();
+      const cliente = await getDatosCliente(nombre);
+      const numero = cliente.numero || "";
 
       await guardarRegistro({
         FECHA: obtenerFecha(),
         CODIGO,
         NOMBRE: nombre,
+        NUMERO: numero,
         EQUIPO: equipo,
         DESCRIPCION: descripcion,
         USD_SERVICIO: usd,
