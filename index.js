@@ -1,102 +1,133 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys')
+const {
+  default: makeWASocket,
+  useMultiFileAuthState,
+  fetchLatestBaileysVersion,
+  DisconnectReason
+} = require('@whiskeysockets/baileys');
+
 const P = require('pino');
 const qrcode = require('qrcode-terminal');
-const fs = require('fs');
+
+const logger = P({ level: 'silent' });
 const { generarCodigo, obtenerFecha, procesarMoneda } = require('./utils');
 const { guardarRegistro, verificarPendiente, actualizarPago } = require('./sheets');
 const { getResumen } = require('./sheets');
 const { getDatosCliente } = require('./sheets');
 const { eliminarUltimoRegistro } = require('./sheets');
 
-async function startBot() {
- const { state, saveCreds } = await useMultiFileAuthState('auth');
+async function startSock() {
+  console.log('🚀 Iniciando bot...');
+
+  const { state, saveCreds } = await useMultiFileAuthState('./auth');
+
   const { version } = await fetchLatestBaileysVersion();
 
   const sock = makeWASocket({
     version,
+    logger,
     auth: state,
-    logger: P({ level: 'silent' }),
-    printQRInTerminal: false,
-    // ✅ Evita caídas por inactividad
-    keepAliveIntervalMs: 30_000,
-    // ✅ Evita desconexión por timeout
-    connectTimeoutMs: 60_000,
-    // ✅ No guardar todos los mensajes en memoria
-    getMessage: async () => undefined,
+    browser: ['Chrome', 'Desktop', '1.0.0'],
+    connectTimeoutMs: 60000,
+    defaultQueryTimeoutMs: 0
   });
 
-  sock.ev.on('creds.update', saveCreds);
+  // 🔥 EVENTOS OPTIMIZADOS (como tu ejemplo TS)
+  sock.ev.process(async (events) => {
 
-  sock.ev.on('connection.update', (update) => {
-    const { connection, lastDisconnect, qr } = update;
+    // 📡 CONEXIÓN
+    if (events['connection.update']) {
+      const { connection, lastDisconnect, qr } = events['connection.update'];
 
-    if (qr) {
-      console.log('📲 Escanea este QR:');
-      qrcode.generate(qr, { small: true });
-    }
-
-    if (connection === 'open') {
-      console.log('✅ Bot conectado');
-      intentos = 0; // ✅ reset al conectar exitosamente
-    }
-
-    if (connection === 'close') {
-      const codigo = lastDisconnect?.error?.output?.statusCode;
-      const fueLogout = codigo === DisconnectReason.loggedOut;
-
-      console.log(`❌ Desconectado — código: ${codigo}`);
-
-      if (fueLogout) {
-        console.log('⚠️ Sesión cerrada. Elimina la carpeta "auth" y reinicia.');
-        process.exit(1); // ✅ sale limpio para que el proceso manager reinicie
-        return;
+      if (qr) {
+        console.log('📲 Escanea QR:');
+        qrcode.generate(qr, { small: true });
       }
 
-      if (intentos >= MAX_INTENTOS) {
-        console.log(`🛑 ${MAX_INTENTOS} intentos fallidos. Reiniciando proceso...`);
-        process.exit(1);
-        return;
+      if (connection === 'open') {
+        console.log('✅ Conectado');
       }
 
-      // ✅ Reconexión con backoff exponencial
-      const espera = Math.min(1000 * 2 ** intentos, 30_000);
-      intentos++;
-      console.log(`🔄 Reintento ${intentos}/${MAX_INTENTOS} en ${espera / 1000}s...`);
-      setTimeout(startBot, espera);
+      if (connection === 'close') {
+        const reason = lastDisconnect?.error?.output?.statusCode;
+
+        console.log('❌ Conexión cerrada:', reason);
+
+        if (reason !== DisconnectReason.loggedOut) {
+          console.log('🔄 Reconectando...');
+          startSock();
+        } else {
+          console.log('🚪 Sesión cerrada');
+        }
+      }
     }
-  });
-  
-  // ✅ HANDLER DE MENSAJES — ahora dentro de startBot() con acceso a sock
-  sock.ev.on('messages.upsert', async ({ messages, type }) => {
-    if (type !== 'notify') return;
 
-    for (const msg of messages) {
-      // Ignorar mensajes propios o de estado
-      console.log('este es el JID:', msg.key.remoteJid);
-      if (msg.key.remoteJid === 'status@broadcast') return;
+    // 💾 GUARDAR SESIÓN
+    if (events['creds.update']) {
+      await saveCreds();
+    }
 
-      const jid = msg.key.remoteJid;
+    // 💬 MENSAJES
+    if (events['messages.upsert']) {
+      const upsert = events['messages.upsert'];
 
-      // Extraer texto del mensaje (texto simple o extended)
-      const text =
-        msg.message?.conversation ||
-        msg.message?.extendedTextMessage?.text ||
-        '';
+      if (upsert.type !== 'notify') return;
 
-      if (!text) return;
+      for (const msg of upsert.messages) {
 
-    // console.log(`📨 [${new Date().toLocaleTimeString()}] JID: ${jid}`);
-    // console.log(`📨 Texto: "${text}"`);
-    // console.log(`📨 Partes: ${JSON.stringify(text.split(',').map(p => p.trim()))}`);
-      // Comandos con "/"
-    //   if (text.startsWith('/')) {
-    //     // Aquí puedes agregar tus comandos
-    //     // Ejemplo: if (text === '/ayuda') { ... }
-    //     return;
-    //   }
+        if (!msg.message) continue;
+
+        const jid = msg.key.remoteJid;
+        console.log('mensaje de: ', jid)
+
+        // 🔥 EXTRAER TEXTO (IMPORTANTE PARA GRUPOS)
+        const text =
+          msg.message.conversation ||
+          msg.message.extendedTextMessage?.text ||
+          msg.message.imageMessage?.caption ||
+          '';
+
+        if (!text) continue;
+
+        
+
+        
+        console.log('📩', text);
+
+        // 🔥 EJEMPLO RESPUESTA
+        if (text.toLowerCase() === '/estado') {
+          await sock.sendMessage(jid, { text: 'activo' }, { quoted: msg });
+        }
+     if (text.toLowerCase() === '/help') {
+
+      await sock.sendMessage(
+        jid,
+        {
+          text: `📌 *Instrucciones de uso*
+
+        *Formato para registrar*:
+        _NOMBRE, MODELO, PRECIO, DESCRIPCION_
+
+        Filtrar datos:
+        _/resumen hoy_
+        
+        Eliminar Ultimo:
+        _/eliminarultimo_
+
+        estado:
+        _/estado_
+        `
+
+        },
+        { quoted: msg }
+      );
+
+      continue;
+    }
+
+        // 👉 AQUÍ VA TU LÓGICA (guardar, sheets, etc)
     if (text.toLowerCase() === '/eliminarultimo') {
 
-    const eliminado = await eliminarUltimoRegistro();
+      const eliminado = await eliminarUltimoRegistro();
 
     if (eliminado.error) {
       await sock.sendMessage(jid, {
@@ -205,8 +236,11 @@ async function startBot() {
       await sock.sendMessage(jid, {
         text: `✅ Guardado: *${CODIGO}*\n${nombre}`,
       });
+      }
     }
   });
+
+  return sock;
 }
 
-startBot();
+startSock();
